@@ -1,3 +1,10 @@
+/**
+ * 配置管理（Docker 优化版）
+ * 新增 FLYPIC_CONFIG_DIR 支持：
+ *   设置后，全局配置（config.json）存储到指定目录
+ *   适用于 Docker 环境下将配置持久化到挂载卷
+ */
+
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -9,8 +16,19 @@ const CONFIG_CACHE_TTL = 5000; // 5秒缓存
 
 /**
  * Get config directory based on environment
+ * 
+ * 优先级：
+ * 1. FLYPIC_CONFIG_DIR 环境变量（Docker 推荐）
+ * 2. TRIM_PKGVAR 环境变量（飞牛 fnOS）
+ * 3. Windows: %APPDATA%/FlyPic
+ * 4. Linux/Mac: ~/.flypic
  */
 function getConfigDir() {
+  // Docker 环境变量优先
+  if (process.env.FLYPIC_CONFIG_DIR) {
+    return process.env.FLYPIC_CONFIG_DIR;
+  }
+  
   // Check if running on fnOS
   if (process.env.TRIM_PKGVAR) {
     return process.env.TRIM_PKGVAR;
@@ -58,8 +76,8 @@ function loadConfig(forceReload = false) {
         thumbnailHeight: 200,
         rowGap: 32,
         columnGap: 16,
-        leftPanelWidth: 256,  // 左侧边栏宽度
-        rightPanelWidth: 320  // 右侧边栏宽度
+        leftPanelWidth: 256,
+        rightPanelWidth: 320
       }
     };
     saveConfig(defaultConfig);
@@ -149,8 +167,6 @@ function addLibrary(name, libraryPath) {
 
 /**
  * Remove library from config
- * @param {string} libraryId - 要删除的素材库ID
- * @param {boolean} autoSelectNext - 是否自动选择下一个素材库，默认 true
  */
 function removeLibrary(libraryId, autoSelectNext = true) {
   const config = loadConfig();
