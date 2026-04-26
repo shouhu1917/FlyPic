@@ -1,12 +1,22 @@
 /**
- * 素材库服务层
- * 封装素材库相关的业务逻辑
+ * 素材库服务层（Docker 优化版）
+ * 
+ * 关键优化：
+ * 1. 当设置 FLYPIC_DATA_DIR 时，不要求素材库路径可写
+ *    （数据库和缩略图存储在 FLYPIC_DATA_DIR 中）
+ * 2. 错误消息适配 Docker 环境，不再只提示 fnOS
+ * 3. 新增目录浏览功能
  */
 
 const fs = require('fs');
 const path = require('path');
 const { NotFoundError, ValidationError } = require('../middleware/errorHandler');
 const { getFlypicPath, getDatabasePath, getThumbnailsPath } = require('../config');
+
+// 检查是否使用独立数据目录模式（Docker 优化）
+function isDataDirSeparate() {
+  return !!process.env.FLYPIC_DATA_DIR;
+}
 
 class LibraryService {
   constructor(configManager, dbPool, scanManager, lightweightWatcher, io) {
@@ -32,6 +42,12 @@ class LibraryService {
 
   /**
    * 创建新素材库
+   * 
+   * Docker 优化逻辑：
+   * - 如果设置了 FLYPIC_DATA_DIR，则只要求素材库路径可读
+   *   （数据库和缩略图存在 FLYPIC_DATA_DIR 中，不需要写素材库路径）
+   * - 如果没有设置 FLYPIC_DATA_DIR，则要求素材库路径可读写
+   *   （原始行为，数据存在素材库路径下的 .flypic 目录）
    */
   async createLibrary(name, libraryPath) {
     // 验证参数
@@ -41,35 +57,71 @@ class LibraryService {
 
     // 规范化路径
     const normalizedPath = path.normalize(libraryPath);
-    logger.system(`创建素材库: name=${name}, path=${normalizedPath}`);
+    console.log(`创建素材库: name=${name}, path=${normalizedPath}`);
     
     if (!fs.existsSync(normalizedPath)) {
-      logger.warn(`路径不存在: ${normalizedPath}`);
-      throw new ValidationError('Path does not exist', 'path');
+      console.warn(`路径不存在: ${normalizedPath}`);
+      throw new ValidationError(
+        '路径不存在。请确认容器内该路径已正确挂载。',
+        'path'
+      );
     }
 
     // 检查文件夹访问权限
     try {
-      // 尝试读取目录
+      // 检查读权限
       fs.readdirSync(normalizedPath);
       
-      // 尝试在目录中创建测试文件（检查写权限）
-      const testFile = path.join(normalizedPath, '.flypic-test');
-      try {
-        fs.writeFileSync(testFile, 'test');
-        fs.unlinkSync(testFile);
-      } catch (writeError) {
-        logger.warn(`无写入权限: ${normalizedPath}`);
-        throw new ValidationError(
-          '无法访问该文件夹。请在飞牛 fnOS 的"数据共享"中将此文件夹添加到 FlyPic 应用的访问权限。',
-          'permission'
-        );
+      if (isDataDirSeparate()) {
+        // Docker 独立数据目录模式：只要求读权限
+        // 确保数据目录可写
+        const dataDir = process.env.FLYPIC_DATA_DIR;
+        if (!fs.existsSync(dataDir)) {
+          try {
+            fs.mkdirSync(dataDir, { recursive: true });
+          } catch (err) {
+            throw new ValidationError(
+              `无法创建数据目录 ${dataDir}，请检查 FLYPIC_DATA_DIR 挂载是否正确。`,
+              'permission'
+            );
+          }
+        }
+        // 测试数据目录写权限
+        const testDataFile = path.join(dataDir, '.flypic-test');
+        try {
+          fs.writeFileSync(testDataFile, 'test');
+          fs.unlinkSync(testDataFile);
+        } catch (writeError) {
+          throw new ValidationError(
+            `数据目录 ${dataDir} 无写入权限，请检查 Docker 卷挂载权限。` +
+            `建议在 docker-compose.yml 中添加 PUID/PGID 环境变量。`,
+            'permission'
+          );
+        }
+        console.log(`✅ Docker 模式：数据将存储到 ${dataDir}`);
+      } else {
+        // 原始模式：要求素材库路径可写
+        const testFile = path.join(normalizedPath, '.flypic-test');
+        try {
+          fs.writeFileSync(testFile, 'test');
+          fs.unlinkSync(testFile);
+        } catch (writeError) {
+          console.warn(`无写入权限: ${normalizedPath}`);
+          throw new ValidationError(
+            '无法访问该文件夹。' +
+            'Docker 用户：请在 docker-compose.yml 中设置 FLYPIC_DATA_DIR 环境变量，' +
+            '将数据存储到可写的目录。' +
+            'fnOS 用户：请在"数据共享"中将此文件夹添加到 FlyPic 应用的访问权限。',
+            'permission'
+          );
+        }
       }
     } catch (readError) {
       if (readError.code === 'EACCES' || readError.code === 'EPERM') {
-        logger.warn(`无访问权限: ${normalizedPath}`);
+        console.warn(`无访问权限: ${normalizedPath}`);
         throw new ValidationError(
-          '无法访问该文件夹。请在飞牛 fnOS 的"数据共享"中将此文件夹添加到 FlyPic 应用的访问权限。',
+          '无法访问该文件夹，请检查文件权限。' +
+          'Docker 用户：请确认卷挂载路径正确，并尝试设置 PUID/PGID 环境变量。',
           'permission'
         );
       }
@@ -98,10 +150,55 @@ class LibraryService {
     return { 
       id, 
       hasExistingIndex,
+      dataDir: isDataDirSeparate() ? flypicDir : null,
       message: hasExistingIndex 
         ? 'Library created with existing index' 
         : 'Library created, please scan to build index'
     };
+  }
+
+  /**
+   * 浏览目录（Docker 新增功能）
+   * 返回指定路径下的子目录列表，帮助用户在容器内找到挂载的目录
+   */
+  browseDirectory(dirPath) {
+    const normalizedPath = path.normalize(dirPath || '/');
+    
+    if (!fs.existsSync(normalizedPath)) {
+      return {
+        path: normalizedPath,
+        parent: null,
+        directories: [],
+        error: '路径不存在'
+      };
+    }
+
+    try {
+      const entries = fs.readdirSync(normalizedPath, { withFileTypes: true });
+      const directories = entries
+        .filter(entry => entry.isDirectory())
+        .filter(entry => !entry.name.startsWith('.'))
+        .map(entry => ({
+          name: entry.name,
+          path: path.join(normalizedPath, entry.name)
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+      
+      const parent = path.dirname(normalizedPath);
+      
+      return {
+        path: normalizedPath,
+        parent: parent !== normalizedPath ? parent : null,
+        directories
+      };
+    } catch (error) {
+      return {
+        path: normalizedPath,
+        parent: null,
+        directories: [],
+        error: error.code === 'EACCES' ? '无权限访问' : error.message
+      };
+    }
   }
 
   /**
@@ -126,8 +223,6 @@ class LibraryService {
 
   /**
    * 删除素材库
-   * @param {string} id - 素材库ID
-   * @param {boolean} autoSelectNext - 是否自动选择下一个素材库，默认 true
    */
   async deleteLibrary(id, autoSelectNext = true) {
     const config = this.configManager.load();
@@ -186,7 +281,7 @@ class LibraryService {
       try {
         this.lightweightWatcher.watch(id, library.path, library.name, this.io);
       } catch (e) {
-        logger.warn('启动文件监控失败:', e.message);
+        console.warn('启动文件监控失败:', e.message);
       }
     }
 
@@ -243,10 +338,6 @@ class LibraryService {
 
   /**
    * 验证素材库路径是否存在
-   * 返回三种状态：
-   * - status: 'ok' - 素材库正常（文件夹和索引都存在）
-   * - status: 'missing_index' - 文件夹存在但索引不存在（需要重新扫描）
-   * - status: 'missing_folder' - 文件夹不存在（需要打开其他或新建）
    */
   validateLibraryPath(libraryId) {
     const config = this.configManager.load();
