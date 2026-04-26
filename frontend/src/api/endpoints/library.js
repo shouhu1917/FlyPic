@@ -66,3 +66,12 @@ export async function updateTheme(theme) {
 export async function validate(id) {
   return api.get(`/library/${id}/validate`);
 }
+
+/**
+ * 浏览目录
+ * @param {string} path - 要浏览的目录路径
+ * @returns {Promise<{path: string, parent: string|null, directories: Array<{name: string, path: string}>, error?: string}>}
+ */
+export async function browse(path) {
+  return api.get('/library/browse', { params: { path } });
+}
