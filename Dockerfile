@@ -19,13 +19,16 @@ RUN apt-get update && \
 
 WORKDIR /build
 
+# 设置 npm 使用官方 registry（避免 lock 文件中的镜像源问题）
+RUN npm config set registry https://registry.npmjs.org/
+
 # 先复制 package 文件，利用 Docker 缓存层
 COPY package.json ./
 COPY package-lock.json* ./
 COPY frontend/package.json frontend/package.json
 COPY backend/package.json backend/package.json
 
-# 安装所有依赖（使用 npm install 以兼容 lock 文件变化）
+# 安装所有依赖
 RUN npm install
 
 # 复制源代码
@@ -44,6 +47,9 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# 设置 npm 使用官方 registry
+RUN npm config set registry https://registry.npmjs.org/
 
 # 复制整个 monorepo 的 package 文件（用于 workspace 配置）
 COPY package.json ./
