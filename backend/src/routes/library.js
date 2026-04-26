@@ -4,25 +4,13 @@
 
 const express = require('express');
 const router = express.Router();
-const LibraryService = require('../services/LibraryService');
 const { asyncHandler } = require('../middleware/errorHandler');
-
-// 创建服务实例的工厂函数
-function createLibraryService(container) {
-  return new LibraryService(
-    container.configManager,
-    container.dbPool,
-    container.scanManager,
-    container.lightweightWatcher,
-    container.io
-  );
-}
 
 /**
  * 获取所有素材库
  */
 router.get('/', asyncHandler(async (req, res) => {
-  const service = createLibraryService(req.app.locals.container);
+  const service = req.app.get('libraryService');
   const result = service.getAllLibraries();
   res.json(result);
 }));
@@ -31,7 +19,7 @@ router.get('/', asyncHandler(async (req, res) => {
  * 浏览目录（Docker 优化：帮助用户找到挂载目录）
  */
 router.get('/browse', asyncHandler(async (req, res) => {
-  const service = createLibraryService(req.app.locals.container);
+  const service = req.app.get('libraryService');
   const dirPath = req.query.path || '/';
   const result = service.browseDirectory(dirPath);
   res.json(result);
@@ -42,7 +30,7 @@ router.get('/browse', asyncHandler(async (req, res) => {
  */
 router.post('/', asyncHandler(async (req, res) => {
   const { name, path } = req.body;
-  const service = createLibraryService(req.app.locals.container);
+  const service = req.app.get('libraryService');
   const result = await service.createLibrary(name, path);
   res.status(201).json(result);
 }));
@@ -53,7 +41,7 @@ router.post('/', asyncHandler(async (req, res) => {
 router.put('/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const updates = req.body;
-  const service = createLibraryService(req.app.locals.container);
+  const service = req.app.get('libraryService');
   const result = service.updateLibrary(id, updates);
   res.json(result);
 }));
@@ -64,7 +52,7 @@ router.put('/:id', asyncHandler(async (req, res) => {
 router.delete('/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
   const autoSelectNext = req.query.autoSelectNext !== 'false';
-  const service = createLibraryService(req.app.locals.container);
+  const service = req.app.get('libraryService');
   const result = await service.deleteLibrary(id, autoSelectNext);
   res.json(result);
 }));
@@ -74,7 +62,7 @@ router.delete('/:id', asyncHandler(async (req, res) => {
  */
 router.post('/:id/set-current', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const service = createLibraryService(req.app.locals.container);
+  const service = req.app.get('libraryService');
   const result = await service.setCurrentLibrary(id);
   res.json(result);
 }));
@@ -84,7 +72,7 @@ router.post('/:id/set-current', asyncHandler(async (req, res) => {
  */
 router.get('/:id/validate', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const service = createLibraryService(req.app.locals.container);
+  const service = req.app.get('libraryService');
   const result = service.validateLibraryPath(id);
   res.json(result);
 }));
@@ -94,7 +82,7 @@ router.get('/:id/validate', asyncHandler(async (req, res) => {
  */
 router.get('/:id/stats', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const service = createLibraryService(req.app.locals.container);
+  const service = req.app.get('libraryService');
   const result = await service.getLibraryStats(id);
   res.json(result);
 }));
@@ -104,7 +92,7 @@ router.get('/:id/stats', asyncHandler(async (req, res) => {
  */
 router.put('/preferences', asyncHandler(async (req, res) => {
   const preferences = req.body;
-  const service = createLibraryService(req.app.locals.container);
+  const service = req.app.get('libraryService');
   const result = service.updatePreferences(preferences);
   res.json(result);
 }));
@@ -114,7 +102,7 @@ router.put('/preferences', asyncHandler(async (req, res) => {
  */
 router.put('/theme', asyncHandler(async (req, res) => {
   const { theme } = req.body;
-  const service = createLibraryService(req.app.locals.container);
+  const service = req.app.get('libraryService');
   const result = service.updateTheme(theme);
   res.json(result);
 }));
