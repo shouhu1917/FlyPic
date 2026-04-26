@@ -45,9 +45,13 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# 复制后端 package 并安装生产依赖
-COPY backend/package.json ./
+# 复制整个 monorepo 的 package 文件（用于 workspace 配置）
+COPY package.json ./
 COPY package-lock.json ./
+COPY frontend/package.json frontend/package.json
+COPY backend/package.json backend/package.json
+
+# 安装生产依赖
 RUN npm ci --omit=dev && \
     npm cache clean --force
 
