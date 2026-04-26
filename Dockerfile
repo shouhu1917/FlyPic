@@ -15,12 +15,12 @@ RUN apt-get update && \
 WORKDIR /build
 
 # 先复制 package 文件，利用 Docker 缓存层
-COPY package.json package-lock.json ./
+COPY package.json ./
 COPY frontend/package.json frontend/package.json
 COPY backend/package.json backend/package.json
 
 # 安装所有依赖（包含 devDependencies，用于构建前端）
-RUN npm ci
+RUN npm install
 
 # 复制源代码
 COPY frontend/ frontend/
@@ -40,8 +40,8 @@ RUN apt-get update && \
 WORKDIR /app
 
 # 复制后端 package 并安装生产依赖
-COPY backend/package.json backend/package-lock.json ./
-RUN npm ci --production && \
+COPY backend/package.json ./
+RUN npm install --production && \
     npm cache clean --force
 
 # 复制后端代码
