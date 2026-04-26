@@ -21,12 +21,12 @@ WORKDIR /build
 
 # 先复制 package 文件，利用 Docker 缓存层
 COPY package.json ./
-COPY package-lock.json ./
+COPY package-lock.json* ./
 COPY frontend/package.json frontend/package.json
 COPY backend/package.json backend/package.json
 
-# 安装所有依赖
-RUN npm ci
+# 安装所有依赖（使用 npm install 以兼容 lock 文件变化）
+RUN npm install
 
 # 复制源代码
 COPY frontend/ frontend/
@@ -47,12 +47,12 @@ WORKDIR /app
 
 # 复制整个 monorepo 的 package 文件（用于 workspace 配置）
 COPY package.json ./
-COPY package-lock.json ./
+COPY package-lock.json* ./
 COPY frontend/package.json frontend/package.json
 COPY backend/package.json backend/package.json
 
 # 安装生产依赖
-RUN npm ci --omit=dev && \
+RUN npm install --omit=dev && \
     npm cache clean --force
 
 # 复制后端代码
