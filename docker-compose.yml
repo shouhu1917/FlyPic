@@ -1,15 +1,15 @@
 # ============================================================
-# FlyPic - Docker Compose 配置
-# 适用于任何支持 Docker Compose 的 NAS
+# FlyPic - Docker Compose 配置（NAS 优化版）
+# 适用于群晖、威联通、fnOS、自建等任何 Docker 环境
 # ============================================================
 
 services:
   flypic:
-    build:
-      context: https://github.com/shouhu1917/FlyPic.git#main
-      dockerfile: Dockerfile
-    # 如果想用预构建镜像，注释掉 build，取消注释 image：
-    # image: ghcr.io/shouhu1917/flypic:latest
+    image: pianai702/flypic:latest
+    # 如需自行构建，注释掉 image，取消注释 build：
+    # build:
+    #   context: https://github.com/shouhu1917/FlyPic.git#main
+    #   dockerfile: Dockerfile
     
     container_name: flypic
     restart: unless-stopped
@@ -18,39 +18,33 @@ services:
       - "15002:15002"
     
     volumes:
-      # 素材库目录 - 映射你的图片文件夹
-      # NAS 路径示例：
-      #   群晖: /volume1/photos
-      #   威联通: /share/photos
-      #   自建: /mnt/data/photos
-      - /path/to/your/photos:/photos:ro
+      # ===== 素材库目录 =====
+      # 挂载你的图片文件夹，支持多个
+      # 关键：不要加 :ro（只读），否则扫描时无法写入索引数据
+      # 除非你使用了 FLYPIC_DATA_DIR（推荐），那时可以加 :ro
       
-      # 数据目录 - 存放配置、数据库、缩略图
-      # 这个目录会存储：
-      #   - config.json (应用配置)
-      #   - 素材库的 .flypic 数据库和缩略图
-      - flypic-data:/data
+      # 方式1：挂父目录，所有子文件夹在容器内都可见
+      - /vol2/@team/综合/娱乐:/media
+      
+      # 方式2：逐个挂载（更精细控制）
+      # - /your/nas/photos:/media/photos
+      # - /your/nas/wallpapers:/media/wallpapers
+      
+      # ===== 数据持久化 =====
+      # 配置文件 + 素材库数据（数据库、缩略图）
+      # 与素材库目录分离，即使素材库是只读挂载也能正常工作
+      - /vol1/1000/docker/flypic/data:/data
     
     environment:
       # 服务端口（默认 15002）
       - PORT=15002
       # Node 环境
       - NODE_ENV=production
-      # 时区（可选，影响日志时间）
+      # 时区
       - TZ=Asia/Shanghai
-    
-    healthcheck:
-      test: ["CMD", "node", "-e", "const http = require('http'); const req = http.get('http://localhost:15002/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.setTimeout(3000, () => { req.destroy(); process.exit(1); });"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
-volumes:
-  flypic-data:
-    name: flypic-data
-
-# 网络配置（可选）
-# networks:
-#   default:
-#     driver: bridge
+      # PUID/PGID - 匹配 NAS 用户权限（重要！）
+      # 不设置则以 root 运行
+      # 群晖查看：id your_username
+      # 威联通查看：id your_username
+      - PUID=0
+      - PGID=0
