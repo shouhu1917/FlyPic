@@ -1,6 +1,6 @@
 /**
- * 素材库路由（新架构）
- * 薄层路由，业务逻辑在 Service 层
+ * 素材库路由（Docker 优化版）
+ * 新增 /api/library/browse 目录浏览接口
  */
 
 const express = require('express');
@@ -17,6 +17,17 @@ router.use((req, res, next) => {
   }
   next();
 });
+
+/**
+ * 浏览目录（Docker 新增）
+ * GET /api/library/browse?path=/media
+ * 帮助用户在容器内浏览挂载的目录结构
+ */
+router.get('/browse', asyncHandler(async (req, res) => {
+  const { path: browsePath } = req.query;
+  const result = libraryService.browseDirectory(browsePath || '/');
+  res.json({ success: true, data: result });
+}));
 
 /**
  * 获取所有素材库
@@ -42,9 +53,8 @@ router.post('/',
 );
 
 /**
- * 更新偏好设置（必须在 /:id 之前，否则会被 /:id 匹配）
+ * 更新偏好设置
  * PUT /api/library/preferences
- * Body: { preferences }
  */
 router.put('/preferences', asyncHandler(async (req, res) => {
   const result = libraryService.updatePreferences(req.body);
@@ -52,9 +62,8 @@ router.put('/preferences', asyncHandler(async (req, res) => {
 }));
 
 /**
- * 更新主题（必须在 /:id 之前）
+ * 更新主题
  * PUT /api/library/theme
- * Body: { theme }
  */
 router.put('/theme', 
   validateRequired(['theme']),
@@ -68,7 +77,6 @@ router.put('/theme',
 /**
  * 更新素材库
  * PUT /api/library/:id
- * Body: { name?, path? }
  */
 router.put('/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -79,7 +87,6 @@ router.put('/:id', asyncHandler(async (req, res) => {
 /**
  * 删除素材库
  * DELETE /api/library/:id
- * Query: autoSelectNext - 是否自动选择下一个素材库，默认 true
  */
 router.delete('/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
