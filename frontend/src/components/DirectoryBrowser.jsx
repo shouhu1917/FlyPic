@@ -1,97 +1,141 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Folder, ChevronRight, HardDrive, ArrowUp } from 'lucide-react';
-import { libraryAPI } from '../api';
-import { createLogger } from '../utils/logger';
-const logger = createLogger('DirectoryBrowser');
+import React, { useState, useCallback } from 'react';
+import { ChevronRight, Folder, ChevronLeft, Home, AlertCircle } from 'lucide-react';
+
 function DirectoryBrowser({ initialPath = '/media', onSelect, onCancel }) {
   const [currentPath, setCurrentPath] = useState(initialPath);
-  const [directories, setDirectories] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [parentPath, setParentPath] = useState(null);
   const [manualPath, setManualPath] = useState(initialPath);
   const [selectedDir, setSelectedDir] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
   const browseDirectory = useCallback(async (dirPath) => {
-    setLoading(true); setError(null);
+    setLoading(true);
+    setErrorMsg('');
+    setSelectedDir(null);
     try {
-      const resp = await libraryAPI.browse(dirPath);
-      const data = resp.data || resp;
-      setDirectories(data.directories || []);
-      setParentPath(data.parent || null);
-      setCurrentPath(dirPath); setManualPath(dirPath); setSelectedDir(null);
+      const resp = await fetch(`/api/library/browse?path=${encodeURIComponent(dirPath)}`);
+      const data = await resp.json();
+      setCurrentPath(dirPath);
+      setManualPath(dirPath);
+      setSelectedDir(null);
+      // 即使 HTTP 200，如果后端返回了 error 字段也要显示
+      if (data.error) {
+        setErrorMsg(data.error);
+      }
     } catch (err) {
-      setError(err.response?.data?.message || err.message || '无法浏览此目录');
-      setDirectories([]);
-    } finally { setLoading(false); }
+      setErrorMsg('无法连接服务器');
+    } finally {
+      setLoading(false);
+    }
   }, []);
-  useEffect(() => { browseDirectory(initialPath); }, [initialPath, browseDirectory]);
-  const handleDirectoryClick = (dir) => browseDirectory(dir.path);
-  const handleGoUp = () => { if (parentPath !== null) browseDirectory(parentPath); };
-  const handleManualGo = () => { const p = manualPath.trim(); if (p) browseDirectory(p); };
-  const handleConfirmSelection = () => onSelect(selectedDir || currentPath);
-  const handleSelectDir = (dir) => setSelectedDir(dir.path);
+
+  React.useEffect(() => {
+    browseDirectory(initialPath);
+  }, [initialPath, browseDirectory]);
+
+  const handleDirectoryClick = (dir) => {
+    setSelectedDir(dir.path);
+    browseDirectory(dir.path);
+  };
+
+  const handleGoUp = () => {
+    const parent = currentPath.split('/').slice(0, -1).join('/') || '/';
+    browseDirectory(parent);
+  };
+
+  const handleManualGo = () => {
+    const p = manualPath.trim();
+    if (p) browseDirectory(p);
+  };
+
+  const handleSelect = () => {
+    const target = selectedDir || currentPath;
+    if (target && target !== '/' && onSelect) {
+      onSelect(target);
+    }
+  };
+
+  // 点击面包屑的某个路径段
+  const handleBreadcrumbClick = (idx) => {
+    const parts = currentPath.split('/').filter(Boolean);
+    const target = '/' + parts.slice(0, idx + 1).join('/');
+    browseDirectory(target);
+  };
+
+  const parts = currentPath.split('/').filter(Boolean);
+
   return (
-    <div className='space-y-3'>
-      <div className='flex gap-2'>
-        <input type='text' value={manualPath} onChange={(e) => setManualPath(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleManualGo()}
-          placeholder='输入路径浏览...'
-          className='flex-1 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100' />
-        <button onClick={handleManualGo}
-          className='px-3 py-1.5 bg-blue-500 text-white rounded text-sm hover:bg-blue-600'>浏览</button>
-      </div>
-      <div className='border border-gray-300 dark:border-gray-600 rounded-lg max-h-64 overflow-y-auto bg-white dark:bg-gray-800'>
-        {parentPath !== null && (
-          <div onClick={handleGoUp}
-            className='flex items-center px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-600'>
-            <ArrowUp className='w-4 h-4 mr-2 text-gray-400' />
-            <span className='text-sm text-gray-500 dark:text-gray-400'>..</span>
-          </div>
-        )}
-        {loading && (
-          <div className='flex items-center justify-center py-8'>
-            <div className='animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500'></div>
-            <span className='ml-2 text-sm text-gray-500'>加载中...</span>
-          </div>
-        )}
-        {error && (
-          <div className='px-3 py-4 text-center'>
-            <p className='text-sm text-red-500'>{error}</p>
-            <p className='text-xs text-gray-400 mt-1'>请确认路径正确且容器已挂载该目录</p>
-          </div>
-        )}
-        {!loading && !error && directories.length === 0 && (
-          <div className='px-3 py-4 text-center'>
-            <HardDrive className='w-6 h-6 mx-auto text-gray-400 mb-1' />
-            <p className='text-sm text-gray-500'>当前目录没有子目录，可直接选择当前目录</p>
-          </div>
-        )}
-        {!loading && !error && directories.map((dir) => (
-          <div key={dir.path}
-            className={'flex items-center px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 last:border-b-0' + (selectedDir === dir.path ? ' bg-blue-50 dark:bg-blue-900/30' : '')}>
-            <div className='flex items-center flex-1 min-w-0' onClick={() => handleDirectoryClick(dir)}>
-              <Folder className='w-4 h-4 mr-2 text-yellow-500 flex-shrink-0' />
-              <span className='text-sm text-gray-700 dark:text-gray-300 truncate'>{dir.name}</span>
-              <ChevronRight className='w-3 h-3 ml-1 text-gray-400 flex-shrink-0' />
-            </div>
-            <button onClick={(e) => { e.stopPropagation(); handleSelectDir(dir); }}
-              className={'ml-2 px-2 py-0.5 text-xs rounded flex-shrink-0 ' + (selectedDir === dir.path ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 hover:bg-blue-100 dark:hover:bg-blue-800')}>
-              选择
+    <div style={{ border: '1px solid #3b82f6', borderRadius: 8, padding: 16, background: '#f0f9ff', maxHeight: 400, overflowY: 'auto' }}>
+      {/* 面包屑导航 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 12, flexWrap: 'wrap' }}>
+        <button onClick={() => browseDirectory('/media')} title="回到 /media" style={{ padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 4, background: '#fff', cursor: 'pointer', fontSize: 12 }}>
+          /media
+        </button>
+        <span style={{ color: '#9ca3af' }}>/</span>
+        {parts.map((part, idx) => (
+          <React.Fragment key={idx}>
+            <button
+              onClick={() => handleBreadcrumbClick(idx)}
+              style={{ padding: '2px 6px', border: 'none', borderRadius: 4, background: idx === parts.length - 1 ? '#3b82f6' : '#e5e7eb', color: idx === parts.length - 1 ? '#fff' : '#374151', cursor: 'pointer', fontSize: 12 }}
+            >
+              {part}
             </button>
-          </div>
+            {idx < parts.length - 1 && <span style={{ color: '#9ca3af' }}>/</span>}
+          </React.Fragment>
         ))}
       </div>
-      <div className='text-xs text-gray-500 dark:text-gray-400'>
-        当前路径: <span className='font-mono text-blue-600 dark:text-blue-400'>{currentPath}</span>
-        {selectedDir && <span> - 选择: <span className='font-mono text-green-600 dark:text-green-400'>{selectedDir}</span></span>}
+
+      {/* 手动路径输入 */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <input
+          value={manualPath}
+          onChange={(e) => setManualPath(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleManualGo()}
+          placeholder="输入路径后回车"
+          style={{ flex: 1, padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13 }}
+        />
+        <button onClick={handleGoUp} disabled={currentPath === '/media' || currentPath === '/'} style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', cursor: 'pointer' }} title="上级目录">
+          <ChevronLeft size={16} />
+        </button>
+        <button onClick={handleManualGo} style={{ padding: '6px 12px', border: '1px solid #3b82f6', borderRadius: 6, background: '#3b82f6', color: '#fff', cursor: 'pointer', fontSize: 13 }}>跳转</button>
       </div>
-      <div className='flex gap-2'>
-        <button onClick={onCancel}
-          className='flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'>取消</button>
-        <button onClick={handleConfirmSelection}
-          className='flex-1 px-3 py-1.5 bg-blue-500 text-white rounded text-sm hover:bg-blue-600'>确认选择</button>
+
+      {/* 错误提示 */}
+      {errorMsg && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 6, marginBottom: 10, color: '#dc2626', fontSize: 13 }}>
+          <AlertCircle size={16} />
+          <span><strong>访问失败：</strong>{errorMsg}</span>
+        </div>
+      )}
+
+      {/* 目录列表 */}
+      <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 6, background: '#fff' }}>
+        {loading ? (
+          <div style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>加载中...</div>
+        ) : (
+          <div>
+            {errorMsg ? null : (
+              <div style={{ padding: 12, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+                {currentPath} 下没有子文件夹
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 操作按钮 */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+        <button onClick={onCancel} style={{ padding: '8px 16px', border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', cursor: 'pointer' }}>取消</button>
+        <button
+          onClick={handleSelect}
+          disabled={!selectedDir && !errorMsg}
+          style={{ padding: '8px 16px', border: '1px solid #10b981', borderRadius: 6, background: !selectedDir ? '#9ca3af' : '#10b981', color: '#fff', cursor: selectedDir ? 'pointer' : 'not-allowed', fontSize: 13 }}
+        >
+          选择此目录
+        </button>
       </div>
     </div>
   );
 }
+
 export default DirectoryBrowser;
