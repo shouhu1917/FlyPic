@@ -1,6 +1,6 @@
 /**
  * 认证中间件
- * 轻量级访问密码验证
+ * 保护需要认证的API路由
  */
 
 const jwt = require('jsonwebtoken');
@@ -9,7 +9,7 @@ const TOKEN_EXPIRY = '30d'; // Token 有效期 30 天
 
 /**
  * 生成 JWT Token
- * @param {string} jwtSecret - JWT 密钥（从配置文件读取）
+ * @param {string} jwtSecret - JWT 密钥（从配置文件获取）
  */
 function generateToken(jwtSecret) {
   if (!jwtSecret) {
@@ -25,7 +25,7 @@ function generateToken(jwtSecret) {
 /**
  * 验证 JWT Token
  * @param {string} token - JWT Token
- * @param {string} jwtSecret - JWT 密钥（从配置文件读取）
+ * @param {string} jwtSecret - JWT 密钥（从配置文件获取）
  */
 function verifyToken(token, jwtSecret) {
   if (!jwtSecret) {
@@ -40,7 +40,7 @@ function verifyToken(token, jwtSecret) {
 }
 
 /**
- * 认证中间件工厂
+ * 创建认证中间件
  * @param {Function} getPasswordHash - 获取密码哈希的函数
  * @param {Function} getJwtSecret - 获取 JWT 密钥的函数
  */
@@ -52,19 +52,20 @@ function createAuthMiddleware(getPasswordHash, getJwtSecret) {
       return next();
     }
 
-    // 公开接口（登录相关 / 健康检查 / 图片资源）
-    // 使用 req.originalUrl 获取完整路径（包含 /api 前缀，去除查询字符串）
+    // 公共接口：登录相关 & 健康检查 & 目录浏览
+    // 使用 req.originalUrl 获取完整路径（去掉 /api 前缀和查询字符串）
     const fullPath = req.originalUrl.split('?')[0];
 
-    // 精确匹配的公开路径
+    // 精确匹配的公共路径
     const publicPaths = [
       '/api/auth/status',
       '/api/auth/login',
       '/api/auth/setup',
-      '/api/health'
+      '/api/health',
+      '/api/library/browse'   // 目录浏览：只读取文件系统路径，无需认证
     ];
 
-    // 前缀匹配的公开路径（缩略图 & 原图资源）
+    // 前缀匹配的公共路径（缩略图 & 原图资源）
     const publicPrefixes = [
       '/api/image/thumbnail/',  // 缩略图
       '/api/image/original/'    // 原图
