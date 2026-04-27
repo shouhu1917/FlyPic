@@ -57,8 +57,7 @@ function DirectoryBrowser({ initialPath = '/media', onSelect, onCancel }) {
 
   // 点击面包屑的某个路径段
   const handleBreadcrumbClick = (idx) => {
-    const parts = currentPath.split('/').filter(Boolean);
-    const target = '/' + parts.slice(0, idx + 1).join('/');
+    const target = '/' + currentPath.split('/').filter(Boolean).slice(0, idx + 1).join('/');
     browseDirectory(target);
   };
 
