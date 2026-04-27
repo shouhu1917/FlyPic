@@ -11,6 +11,7 @@ import ContextMenu, { menuItems } from './ContextMenu';
 import UndoToast from './UndoToast';
 import FolderSelector from './FolderSelector';
 import ConflictDialog from './ConflictDialog';
+import DirectoryBrowser from './DirectoryBrowser';
 import { createLogger } from '../utils/logger';
 
 const logger = createLogger('Sidebar');
@@ -43,6 +44,7 @@ function Sidebar() {
   const [showAddLibrary, setShowAddLibrary] = useState(false);
   const [newLibraryName, setNewLibraryName] = useState('');
   const [newLibraryPath, setNewLibraryPath] = useState('');
+  const [showPathBrowser, setShowPathBrowser] = useState(false);
   const [folderSearch, setFolderSearch] = useState('');
   const [localFolderSearch, setLocalFolderSearch] = useState('');  // 本地输入值
   const [expandedFolders, setExpandedFolders] = useState(new Set());
@@ -1540,14 +1542,35 @@ function Sidebar() {
                 autoFocus
                 className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
               />
-              <input
-                type="text"
-                placeholder="文件夹路径（例如：C:\Users\Pictures）"
-                value={newLibraryPath}
-                onChange={(e) => setNewLibraryPath(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddLibrary()}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-              />
+              {!showPathBrowser ? (
+                <>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="文件夹路径（Docker: /media/写真）"
+                      value={newLibraryPath}
+                      onChange={(e) => setNewLibraryPath(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddLibrary()}
+                      className="flex-1 px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                    />
+                    <button
+                      onClick={() => setShowPathBrowser(true)}
+                      className="px-3 py-1.5 bg-green-500 text-white rounded text-sm hover:bg-green-600 whitespace-nowrap"
+                    >
+                      浏览
+                    </button>
+                  </div>
+                  {newLibraryPath && (
+                    <p className="text-xs text-gray-400">当前路径: <span className="font-mono text-blue-500">{newLibraryPath}</span></p>
+                  )}
+                </>
+              ) : (
+                <DirectoryBrowser
+                  initialPath={newLibraryPath || '/media'}
+                  onSelect={(path) => { setNewLibraryPath(path); setShowPathBrowser(false); }}
+                  onCancel={() => setShowPathBrowser(false)}
+                />
+              )}
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowAddLibrary(false)}
