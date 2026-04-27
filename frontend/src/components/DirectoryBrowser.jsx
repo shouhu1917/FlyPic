@@ -1,29 +1,33 @@
 import React, { useState, useCallback } from 'react';
-import { ChevronRight, Folder, ChevronLeft, Home, AlertCircle } from 'lucide-react';
+import { ChevronLeft, Home, AlertCircle, FolderOpen } from 'lucide-react';
 
 function DirectoryBrowser({ initialPath = '/media', onSelect, onCancel }) {
   const [currentPath, setCurrentPath] = useState(initialPath);
   const [manualPath, setManualPath] = useState(initialPath);
-  const [selectedDir, setSelectedDir] = useState(null);
+  const [directories, setDirectories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   const browseDirectory = useCallback(async (dirPath) => {
     setLoading(true);
     setErrorMsg('');
-    setSelectedDir(null);
     try {
       const resp = await fetch(`/api/library/browse?path=${encodeURIComponent(dirPath)}`);
       const data = await resp.json();
       setCurrentPath(dirPath);
       setManualPath(dirPath);
-      setSelectedDir(null);
-      // 即使 HTTP 200，如果后端返回了 error 字段也要显示
+      
+      // 修复：正确处理 error 字段（可能是对象或字符串）
       if (data.error) {
-        setErrorMsg(data.error);
+        const errorText = typeof data.error === 'string' ? data.error : (data.error.message || JSON.stringify(data.error));
+        setErrorMsg(errorText);
+        setDirectories([]);
+      } else {
+        setDirectories(data.directories || []);
       }
     } catch (err) {
-      setErrorMsg('无法连接服务器');
+      setErrorMsg(err.message || '无法连接到服务器');
+      setDirectories([]);
     } finally {
       setLoading(false);
     }
@@ -34,7 +38,6 @@ function DirectoryBrowser({ initialPath = '/media', onSelect, onCancel }) {
   }, [initialPath, browseDirectory]);
 
   const handleDirectoryClick = (dir) => {
-    setSelectedDir(dir.path);
     browseDirectory(dir.path);
   };
 
@@ -49,15 +52,14 @@ function DirectoryBrowser({ initialPath = '/media', onSelect, onCancel }) {
   };
 
   const handleSelect = () => {
-    const target = selectedDir || currentPath;
-    if (target && target !== '/' && onSelect) {
-      onSelect(target);
+    if (currentPath && currentPath !== '/' && onSelect) {
+      onSelect(currentPath);
     }
   };
 
-  // 点击面包屑的某个路径段
   const handleBreadcrumbClick = (idx) => {
-    const target = '/' + currentPath.split('/').filter(Boolean).slice(0, idx + 1).join('/');
+    const parts = currentPath.split('/').filter(Boolean);
+    const target = '/' + parts.slice(0, idx + 1).join('/');
     browseDirectory(target);
   };
 
@@ -107,17 +109,32 @@ function DirectoryBrowser({ initialPath = '/media', onSelect, onCancel }) {
         </div>
       )}
 
-      {/* 目录列表 */}
+      {/* 目录列表 - 修复：实际渲染 directories */}
       <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 6, background: '#fff' }}>
         {loading ? (
           <div style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>加载中...</div>
+        ) : errorMsg ? (
+          <div style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>
+            <button onClick={() => browseDirectory(currentPath)} style={{ padding: '6px 12px', border: '1px solid #3b82f6', borderRadius: 4, background: '#fff', color: '#3b82f6', cursor: 'pointer' }}>重试</button>
+          </div>
+        ) : directories.length === 0 ? (
+          <div style={{ padding: 12, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+            {currentPath} 下没有子文件夹
+          </div>
         ) : (
           <div>
-            {errorMsg ? null : (
-              <div style={{ padding: 12, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
-                {currentPath} 下没有子文件夹
+            {directories.map((dir) => (
+              <div
+                key={dir.path}
+                onClick={() => handleDirectoryClick(dir)}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f3f4f6' }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#f9fafb'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
+              >
+                <FolderOpen size={18} color="#3b82f6" />
+                <span style={{ fontSize: 13, color: '#374151' }}>{dir.name}</span>
               </div>
-            )}
+            ))}
           </div>
         )}
       </div>
@@ -127,8 +144,8 @@ function DirectoryBrowser({ initialPath = '/media', onSelect, onCancel }) {
         <button onClick={onCancel} style={{ padding: '8px 16px', border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', cursor: 'pointer' }}>取消</button>
         <button
           onClick={handleSelect}
-          disabled={!selectedDir && !errorMsg}
-          style={{ padding: '8px 16px', border: '1px solid #10b981', borderRadius: 6, background: !selectedDir ? '#9ca3af' : '#10b981', color: '#fff', cursor: selectedDir ? 'pointer' : 'not-allowed', fontSize: 13 }}
+          disabled={!currentPath || currentPath === '/'}
+          style={{ padding: '8px 16px', border: '1px solid #10b981', borderRadius: 6, background: (!currentPath || currentPath === '/') ? '#9ca3af' : '#10b981', color: '#fff', cursor: (!currentPath || currentPath === '/') ? 'not-allowed' : 'pointer', fontSize: 13 }}
         >
           选择此目录
         </button>
